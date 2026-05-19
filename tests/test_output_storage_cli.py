@@ -29,7 +29,7 @@ def test_render_usage_csv_includes_business_context() -> None:
     csv_text = render_usage_csv([sample_result()])
 
     assert csv_text.startswith("\ufeff")
-    assert "phone;fetched_at;name;limit;available;valid_until" in csv_text
+    assert "phone,fetched_at,name,limit,available,valid_until" in csv_text
     assert "201234567" in csv_text
     assert "EU roaming adatkeret" in csv_text
 

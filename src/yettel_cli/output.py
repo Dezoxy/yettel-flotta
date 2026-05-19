@@ -100,7 +100,6 @@ def render_usage_csv(results: list[UsageResult]) -> str:
     writer = csv.DictWriter(
         output,
         fieldnames=["phone", "fetched_at", "name", "limit", "available", "valid_until"],
-        delimiter=";",
         quoting=csv.QUOTE_MINIMAL,
         lineterminator="\n",
     )

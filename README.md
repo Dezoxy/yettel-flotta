@@ -122,7 +122,7 @@ Single-number usage returns rows with:
 CSV output is Excel-friendly by default:
 
 - UTF-8 with BOM
-- semicolon-separated (`;`)
+- comma-separated (`,`), matching Office Excel's normal `.csv` open behavior
 - safe CSV quoting
 
 CSV exports include business context columns:
