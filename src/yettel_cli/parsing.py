@@ -226,12 +226,24 @@ def clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
-def first_form(html: str) -> FormSnapshot:
+def all_forms(html: str) -> list[FormSnapshot]:
     parser = FormParser()
     parser.feed(html)
     if not parser.forms:
         raise PortalLayoutError("No HTML form found in portal response.")
-    return parser.forms[0]
+    return parser.forms
+
+
+def first_form(html: str) -> FormSnapshot:
+    return all_forms(html)[0]
+
+
+def form_with_select(html: str, select_name: str) -> FormSnapshot:
+    forms = all_forms(html)
+    for form in forms:
+        if select_name in form.selects:
+            return form
+    raise PortalLayoutError(f"Could not find the expected phone selector ({select_name}) in the portal response.")
 
 
 def form_action_url(current_url: str, form: FormSnapshot) -> str:
@@ -249,8 +261,7 @@ def normalize_phone(phone: str) -> str:
 
 
 def parse_phone_options(html: str) -> list[PhoneNumber]:
-    form = first_form(html)
-    return [PhoneNumber(number=option) for option in form.selects.get(PHONE_SELECT, [])]
+    return [PhoneNumber(number=option) for form in all_forms(html) for option in form.selects.get(PHONE_SELECT, [])]
 
 
 def parse_usage_rows(html: str) -> list[UsageRow]:

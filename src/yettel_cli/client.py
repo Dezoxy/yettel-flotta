@@ -16,6 +16,7 @@ from .parsing import (
     extract_login_error,
     first_form,
     form_action_url,
+    form_with_select,
     is_login_page,
     normalize_phone,
     parse_phone_options,
@@ -108,11 +109,23 @@ class YettelClient:
         return True
 
     def phones(self) -> list[PhoneNumber]:
-        return parse_phone_options(self.usage_page())
+        html = self.usage_page()
+        phones = parse_phone_options(html)
+        if phones:
+            return phones
+        debug_path = self._write_debug_html(html, "phones-empty")
+        if debug_path:
+            raise PortalLayoutError(
+                f"Could not find phone numbers in the portal response. Redacted debug HTML saved to {debug_path}."
+            )
+        raise PortalLayoutError(
+            "Could not find phone numbers in the portal response. "
+            "Run `yettel status --check-remote`; if the session is active, set YETTEL_DEBUG_HTML_DIR and retry."
+        )
 
     def usage(self, phone: str) -> UsageResult:
         html = self.usage_page()
-        form = first_form(html)
+        form = form_with_select(html, PHONE_SELECT)
         fields = dict(form.fields)
         options = form.selects.get(PHONE_SELECT, [])
         normalized_phone = normalize_phone(phone)

@@ -6,7 +6,14 @@ import pytest
 
 from yettel_cli.constants import PHONE_SELECT
 from yettel_cli.errors import PortalLayoutError
-from yettel_cli.parsing import first_form, normalize_phone, parse_phone_options, parse_usage_rows, redact_sensitive_html
+from yettel_cli.parsing import (
+    first_form,
+    form_with_select,
+    normalize_phone,
+    parse_phone_options,
+    parse_usage_rows,
+    redact_sensitive_html,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -27,6 +34,24 @@ def test_parse_phone_options() -> None:
     phones = parse_phone_options(fixture("usage.html"))
 
     assert [phone.number for phone in phones] == ["201111111", "201234567", "309999999"]
+
+
+def test_parse_phone_options_from_later_form() -> None:
+    html = f"""
+    <form><input name="search" value=""></form>
+    <form action="/usage">
+      <select name="{PHONE_SELECT}">
+        <option value="201234567">201234567</option>
+        <option value="301234567">301234567</option>
+      </select>
+    </form>
+    """
+
+    phones = parse_phone_options(html)
+    form = form_with_select(html, PHONE_SELECT)
+
+    assert [phone.number for phone in phones] == ["201234567", "301234567"]
+    assert form.fields[PHONE_SELECT] == "201234567"
 
 
 def test_parse_usage_rows() -> None:
