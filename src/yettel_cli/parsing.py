@@ -151,6 +151,77 @@ class TableParser(HTMLParser):
             self.tables.append(table)
 
 
+class AllowanceParser(HTMLParser):
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.rows: list[UsageRow] = []
+        self._inside_allowances = False
+        self._allowance_depth = 0
+        self._current_row: dict[str, str] | None = None
+        self._current_field: str | None = None
+        self._field_parts: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        attr = {key.lower(): value or "" for key, value in attrs}
+        tag = tag.lower()
+
+        if tag == "ul" and (attr.get("id") == "Allowances" or "SocTraffic" in attr.get("class", "")):
+            self._inside_allowances = True
+            self._allowance_depth = 1
+            return
+
+        if not self._inside_allowances:
+            return
+
+        self._allowance_depth += 1
+        class_names = set(attr.get("class", "").split())
+
+        if tag == "li" and "Row" in class_names:
+            self._current_row = {}
+            return
+
+        if tag == "div" and self._current_row is not None:
+            for field in ("Name", "Maximum", "Remaining", "EndDate"):
+                if field in class_names:
+                    self._current_field = field
+                    self._field_parts = []
+                    return
+
+    def handle_data(self, data: str) -> None:
+        if self._inside_allowances and self._current_field:
+            self._field_parts.append(data)
+
+    def handle_endtag(self, tag: str) -> None:
+        tag = tag.lower()
+        if not self._inside_allowances:
+            return
+
+        if tag == "div" and self._current_field and self._current_row is not None:
+            self._current_row[self._current_field] = clean_text("".join(self._field_parts))
+            self._current_field = None
+            self._field_parts = []
+            self._allowance_depth -= 1
+            return
+
+        if tag == "li" and self._current_row is not None:
+            row = self._current_row
+            if row.get("Name"):
+                self.rows.append(
+                    UsageRow(
+                        name=row.get("Name", ""),
+                        limit=row.get("Maximum", ""),
+                        available=row.get("Remaining", ""),
+                        valid_until=row.get("EndDate", ""),
+                    )
+                )
+            self._current_row = None
+
+        self._allowance_depth -= 1
+        if tag == "ul" and self._allowance_depth <= 0:
+            self._inside_allowances = False
+            self._allowance_depth = 0
+
+
 def clean_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
@@ -183,6 +254,11 @@ def parse_phone_options(html: str) -> list[PhoneNumber]:
 
 
 def parse_usage_rows(html: str) -> list[UsageRow]:
+    allowance_parser = AllowanceParser()
+    allowance_parser.feed(html)
+    if allowance_parser.rows:
+        return allowance_parser.rows
+
     parser = TableParser()
     parser.feed(html)
 

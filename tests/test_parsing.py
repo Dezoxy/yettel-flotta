@@ -41,6 +41,25 @@ def test_parse_usage_rows() -> None:
     assert rows[1].name == "EU roaming adatkeret"
 
 
+def test_parse_usage_rows_from_allowances_list() -> None:
+    rows = parse_usage_rows(fixture("usage_result_allowances.html"))
+
+    assert [row.to_dict() for row in rows] == [
+        {
+            "name": "SMS belföldön és 1. roaming díjzónában",
+            "limit": "100 db",
+            "available": "98 db",
+            "valid_until": "2026.06.06",
+        },
+        {
+            "name": "Tarifába épített 25 GB adatkeret",
+            "limit": "25 GB",
+            "available": "14.79 GB",
+            "valid_until": "2026.06.06",
+        },
+    ]
+
+
 def test_parse_usage_rows_errors_when_layout_changes() -> None:
     with pytest.raises(PortalLayoutError):
         parse_usage_rows("<html><body>No expected table</body></html>")
