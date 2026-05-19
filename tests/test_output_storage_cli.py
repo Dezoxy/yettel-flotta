@@ -49,3 +49,15 @@ def test_menu_can_exit(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr("builtins.input", lambda _prompt="": "7")
 
     assert main(["--env-file", str(tmp_path / ".env"), "--cookie-file", str(tmp_path / "cookies.txt")]) == 0
+
+
+def test_menu_ctrl_c_exits_cleanly(monkeypatch, tmp_path: Path, capsys) -> None:
+    monkeypatch.chdir(tmp_path)
+
+    def interrupt(_prompt: str = "") -> str:
+        raise KeyboardInterrupt
+
+    monkeypatch.setattr("builtins.input", interrupt)
+
+    assert main(["--env-file", str(tmp_path / ".env"), "--cookie-file", str(tmp_path / "cookies.txt")]) == 130
+    assert "Exiting." in capsys.readouterr().out

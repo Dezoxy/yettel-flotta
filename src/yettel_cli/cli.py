@@ -14,13 +14,27 @@ from .output import export_usage_result, export_usage_results, print_usage_resul
 from .storage import UsageHistoryStore
 
 
+class UserExit(Exception):
+    """Raised when the user exits an interactive prompt with Ctrl+C or Ctrl+D."""
+
+
+def prompt_text(prompt: str) -> str:
+    try:
+        return input(prompt).strip()
+    except (KeyboardInterrupt, EOFError) as error:
+        raise UserExit from error
+
+
 def require_credentials(args: argparse.Namespace) -> tuple[str, str]:
     username = getattr(args, "username", None) or os.environ.get("YETTEL_USERNAME")
     password = getattr(args, "password", None) or os.environ.get("YETTEL_PASSWORD")
     if not username:
-        username = input("Yettel username: ").strip()
+        username = prompt_text("Yettel username: ")
     if not password:
-        password = getpass.getpass("Yettel password: ")
+        try:
+            password = getpass.getpass("Yettel password: ")
+        except (KeyboardInterrupt, EOFError) as error:
+            raise UserExit from error
     if not username or not password:
         raise YettelError("Missing username or password.")
     return username, password
@@ -40,7 +54,7 @@ def prompt_menu_choice(client: YettelClient, config: AppConfig) -> str:
     print("5. Fetch usage by selecting a phone number")
     print("6. Fetch all phone numbers and export")
     print("7. Exit")
-    return input("Select option: ").strip()
+    return prompt_text("Select option: ")
 
 
 def prompt_output_format(default: str = "text") -> str:
@@ -51,13 +65,13 @@ def prompt_output_format(default: str = "text") -> str:
     print("1. Text")
     print("2. JSON")
     print("3. CSV")
-    choice = input(f"Select format [{default_label}]: ").strip()
+    choice = prompt_text(f"Select format [{default_label}]: ")
     return formats.get(choice, default)
 
 
 def yes_no(prompt: str, default: bool = False) -> bool:
     suffix = "Y/n" if default else "y/N"
-    choice = input(f"{prompt} [{suffix}]: ").strip().lower()
+    choice = prompt_text(f"{prompt} [{suffix}]: ").lower()
     if not choice:
         return default
     return choice in {"y", "yes"}
@@ -124,71 +138,76 @@ def handle_all_usage(args: argparse.Namespace, client: YettelClient, config: App
 
 
 def interactive_menu(args: argparse.Namespace, client: YettelClient, config: AppConfig) -> int:
-    while True:
-        choice = prompt_menu_choice(client, config)
+    try:
+        while True:
+            choice = prompt_menu_choice(client, config)
 
-        try:
-            if choice == "1":
-                handle_login(args, client, config)
-                continue
-
-            if choice == "2":
-                print(f"Portal session: {'active' if client.session_alive() else 'expired'}")
-                continue
-
-            if choice == "3":
-                print_phones([phone.number for phone in client.phones()])
-                continue
-
-            if choice == "4":
-                phone = input("Phone number: ").strip()
-                if not phone:
-                    print("Phone number is required.")
+            try:
+                if choice == "1":
+                    handle_login(args, client, config)
                     continue
-                output_format = prompt_output_format()
-                result = client.usage(phone)
-                print_usage_result(result, output_format)
-                if yes_no("Export this result?"):
-                    print(f"Exported {export_usage_result(result, config.export_dir, output_format)}.")
-                if yes_no("Save to SQLite history?"):
-                    save_history_if_requested(config, result, True)
-                continue
 
-            if choice == "5":
-                phones = [phone.number for phone in client.phones()]
-                print_phones(phones)
-                if not phones:
+                if choice == "2":
+                    print(f"Portal session: {'active' if client.session_alive() else 'expired'}")
                     continue
-                selected = input("Select phone number: ").strip()
-                if not selected.isdigit() or not 1 <= int(selected) <= len(phones):
-                    print("Invalid phone selection.")
+
+                if choice == "3":
+                    print_phones([phone.number for phone in client.phones()])
                     continue
-                output_format = prompt_output_format()
-                result = client.usage(phones[int(selected) - 1])
-                print_usage_result(result, output_format)
-                if yes_no("Export this result?"):
-                    print(f"Exported {export_usage_result(result, config.export_dir, output_format)}.")
-                if yes_no("Save to SQLite history?"):
-                    save_history_if_requested(config, result, True)
-                continue
 
-            if choice == "6":
-                output_format = prompt_output_format(default="csv")
-                results = client.all_usage()
-                path = export_usage_results(results, config.export_dir, output_format)
-                print(f"Fetched {len(results)} phone numbers.")
-                print(f"Exported {path}.")
-                if yes_no("Save to SQLite history?"):
-                    save_history_if_requested(config, results, True)
-                continue
+                if choice == "4":
+                    phone = prompt_text("Phone number: ")
+                    if not phone:
+                        print("Phone number is required.")
+                        continue
+                    output_format = prompt_output_format()
+                    result = client.usage(phone)
+                    print_usage_result(result, output_format)
+                    if yes_no("Export this result?"):
+                        print(f"Exported {export_usage_result(result, config.export_dir, output_format)}.")
+                    if yes_no("Save to SQLite history?"):
+                        save_history_if_requested(config, result, True)
+                    continue
 
-            if choice in {"7", "q", "quit", "exit"}:
-                return 0
+                if choice == "5":
+                    phones = [phone.number for phone in client.phones()]
+                    print_phones(phones)
+                    if not phones:
+                        continue
+                    selected = prompt_text("Select phone number: ")
+                    if not selected.isdigit() or not 1 <= int(selected) <= len(phones):
+                        print("Invalid phone selection.")
+                        continue
+                    output_format = prompt_output_format()
+                    result = client.usage(phones[int(selected) - 1])
+                    print_usage_result(result, output_format)
+                    if yes_no("Export this result?"):
+                        print(f"Exported {export_usage_result(result, config.export_dir, output_format)}.")
+                    if yes_no("Save to SQLite history?"):
+                        save_history_if_requested(config, result, True)
+                    continue
 
-            print("Unknown option.")
+                if choice == "6":
+                    output_format = prompt_output_format(default="csv")
+                    results = client.all_usage()
+                    path = export_usage_results(results, config.export_dir, output_format)
+                    print(f"Fetched {len(results)} phone numbers.")
+                    print(f"Exported {path}.")
+                    if yes_no("Save to SQLite history?"):
+                        save_history_if_requested(config, results, True)
+                    continue
 
-        except YettelError as error:
-            print(f"error: {error}", file=sys.stderr)
+                if choice in {"7", "q", "quit", "exit"}:
+                    return 0
+
+                print("Unknown option.")
+
+            except YettelError as error:
+                print(f"error: {error}", file=sys.stderr)
+    except UserExit:
+        print()
+        print("Exiting.")
+        return 130
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -251,6 +270,10 @@ def main(argv: Iterable[str] | None = None) -> int:
     except YettelError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1
+    except UserExit:
+        print()
+        print("Exiting.")
+        return 130
 
     parser.error("unknown command")
     return 2
