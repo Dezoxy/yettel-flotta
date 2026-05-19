@@ -132,9 +132,11 @@ class YettelClient:
 
         try:
             rows = parse_usage_rows(html)
-        except PortalLayoutError:
-            self._write_debug_html(html, "usage-layout-error")
-            raise
+        except PortalLayoutError as error:
+            debug_path = self._write_debug_html(html, f"usage-layout-error-{matching_option or phone}")
+            if debug_path:
+                raise PortalLayoutError(f"{error} Redacted debug HTML saved to {debug_path}.") from error
+            raise PortalLayoutError(f"{error} Set YETTEL_DEBUG_HTML_DIR to save redacted debug HTML.") from error
 
         return UsageResult(phone=matching_option or phone, rows=rows, fetched_at=datetime.now().astimezone())
 

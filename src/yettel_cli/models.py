@@ -37,3 +37,7 @@ class UsageResult:
             "fetched_at": self.fetched_at.isoformat(timespec="seconds"),
             "rows": [row.to_dict() for row in self.rows],
         }
+
+    @staticmethod
+    def parse_fetched_at(value: str) -> datetime:
+        return datetime.fromisoformat(value)

@@ -2,9 +2,10 @@ VENV ?= .venv
 PYTHON ?= $(VENV)/bin/python
 BOOTSTRAP_PYTHON ?= python3
 FORMAT ?= text
+REPORT_FORMAT ?= xlsx
 VENV_STAMP := $(VENV)/.yettel-dev-installed
 
-.PHONY: help install install-dev refresh-venv yettel run status login phones usage all-usage test lint format check precommit-install precommit-run precommit-uninstall clean
+.PHONY: help install install-dev refresh-venv yettel run status login phones usage all-usage report test lint format check precommit-install precommit-run precommit-uninstall clean
 
 help:
 	@echo "Yettel flotta CLI"
@@ -20,6 +21,7 @@ help:
 	@echo "  make phones                     List phone numbers from the portal"
 	@echo "  make usage PHONE=205...         Fetch usage for a phone number"
 	@echo "  make all-usage                  Fetch all phone numbers"
+	@echo "  make report                     Build full business report"
 	@echo "  make test                       Run unit tests"
 	@echo "  make lint                       Run ruff lint"
 	@echo "  make format                     Run ruff format"
@@ -30,7 +32,8 @@ help:
 	@echo "  make clean                      Remove local Python caches"
 	@echo ""
 	@echo "Options:"
-	@echo "  FORMAT=text|json|csv            Output format for usage/all-usage"
+	@echo "  FORMAT=text|json|csv|xlsx       Output format for usage/all-usage"
+	@echo "  REPORT_FORMAT=xlsx|csv|json|text Output format for report"
 	@echo "  VENV=.venv                      Local virtual environment path"
 
 $(PYTHON):
@@ -68,13 +71,16 @@ phones: $(VENV_STAMP)
 
 usage: $(VENV_STAMP)
 	@if [ -z "$(PHONE)" ]; then \
-		echo "Usage: make usage PHONE=201234567 [FORMAT=text|json|csv]"; \
+		echo "Usage: make usage PHONE=201234567 [FORMAT=text|json|csv|xlsx]"; \
 		exit 2; \
 	fi
 	PYTHONPATH=src $(PYTHON) -m yettel_cli usage "$(PHONE)" --format "$(FORMAT)"
 
 all-usage: $(VENV_STAMP)
 	PYTHONPATH=src $(PYTHON) -m yettel_cli all-usage --format "$(FORMAT)" --save
+
+report: $(VENV_STAMP)
+	PYTHONPATH=src $(PYTHON) -m yettel_cli report --format "$(REPORT_FORMAT)"
 
 test: install-dev
 	PYTHONPATH=src $(PYTHON) -m pytest

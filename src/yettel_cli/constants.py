@@ -11,3 +11,4 @@ PHONE_POSTBACK = "_ctl0:content:rawdataselector:lnkCtn"
 DEFAULT_COOKIE_FILE = ".yettel-cookies.txt"
 DEFAULT_EXPORT_DIR = "exports"
 DEFAULT_HISTORY_DB = "yettel-history.sqlite3"
+SUPPORTED_OUTPUT_FORMATS = ("text", "json", "csv", "xlsx")

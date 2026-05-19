@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from pathlib import Path
 
-from .constants import DEFAULT_COOKIE_FILE, DEFAULT_EXPORT_DIR, DEFAULT_HISTORY_DB
+from .constants import DEFAULT_COOKIE_FILE, DEFAULT_EXPORT_DIR, DEFAULT_HISTORY_DB, SUPPORTED_OUTPUT_FORMATS
 
 
 @dataclass(frozen=True)
@@ -16,6 +16,10 @@ class AppConfig:
     db_path: Path
     timeout_seconds: int = 30
     retries: int = 1
+    default_format: str | None = None
+    low_data_gb_threshold: float = 5.0
+    expiry_warning_days: int = 3
+    export_open_after_create: bool = False
     debug_html_dir: Path | None = None
 
     @classmethod
@@ -42,6 +46,11 @@ class AppConfig:
             db_path or os.environ.get("YETTEL_HISTORY_DB") or root / DEFAULT_HISTORY_DB
         ).expanduser()
         debug_html = os.environ.get("YETTEL_DEBUG_HTML_DIR")
+        default_format = os.environ.get("YETTEL_DEFAULT_FORMAT")
+        if default_format is not None:
+            default_format = default_format.lower()
+        if default_format not in SUPPORTED_OUTPUT_FORMATS:
+            default_format = None
 
         return cls(
             project_root=root,
@@ -51,6 +60,10 @@ class AppConfig:
             db_path=resolved_db_path,
             timeout_seconds=int(os.environ.get("YETTEL_TIMEOUT_SECONDS", "30")),
             retries=int(os.environ.get("YETTEL_RETRIES", "1")),
+            default_format=default_format,
+            low_data_gb_threshold=float(os.environ.get("YETTEL_LOW_DATA_GB_THRESHOLD", "5")),
+            expiry_warning_days=int(os.environ.get("YETTEL_EXPIRY_WARNING_DAYS", "3")),
+            export_open_after_create=parse_bool(os.environ.get("YETTEL_EXPORT_OPEN_AFTER_CREATE", "false")),
             debug_html_dir=Path(debug_html).expanduser() if debug_html else None,
         )
 
@@ -66,3 +79,7 @@ def load_dotenv(path: Path) -> None:
         key = key.strip()
         value = value.strip().strip("'\"")
         os.environ.setdefault(key, value)
+
+
+def parse_bool(value: str) -> bool:
+    return value.strip().lower() in {"1", "true", "yes", "y", "on"}

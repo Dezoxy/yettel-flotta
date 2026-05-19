@@ -60,8 +60,11 @@ Running `make yettel`, `make run`, or `yettel` opens:
 3. List phone numbers
 4. Fetch usage by phone number
 5. Fetch usage by selecting a phone number
-6. Fetch all phone numbers and export
-7. Exit
+6. Fetch last selected phone again
+7. Fetch all phone numbers and export
+8. Build business report
+9. Open exports folder
+10. Exit
 ```
 
 ## Make Commands
@@ -76,6 +79,7 @@ make login
 make phones
 make usage PHONE=201234567 FORMAT=json
 make all-usage FORMAT=csv
+make report
 make test
 make lint
 make format
@@ -86,7 +90,7 @@ make precommit-uninstall
 make clean
 ```
 
-`FORMAT` can be `text`, `json`, or `csv`.
+`FORMAT` can be `text`, `json`, `csv`, or `xlsx`.
 
 ## Direct CLI Commands
 
@@ -102,6 +106,8 @@ After `make refresh-venv`, either use the Makefile or run the installed command 
 .venv/bin/yettel usage 201234567 --format csv
 .venv/bin/yettel usage 201234567 --format csv --save --history
 .venv/bin/yettel all-usage --format csv --save --history
+.venv/bin/yettel report
+.venv/bin/yettel report --open
 ```
 
 If the portal redirects to the login page, run:
@@ -138,6 +144,21 @@ Exports are written to `exports/` by default.
 
 SQLite history is stored in `yettel-history.sqlite3` when `--history` is used.
 
+Native Excel (`.xlsx`) output is also supported. Workbooks include:
+
+- `Summary`: one row per phone with key data/SMS fields and warning count
+- `Usage`: all raw usage rows
+- `Warnings`: low-data and expiry warnings
+- `Changes`: differences versus the latest saved SQLite snapshot
+
+The report command is the main business workflow:
+
+```bash
+make report
+```
+
+It fetches all phone numbers, compares them with the latest history snapshot, exports an `.xlsx` report, saves the new snapshot to SQLite, and prints warnings/changes in the terminal.
+
 ## Environment Variables
 
 ```env
@@ -150,8 +171,14 @@ YETTEL_EXPORT_DIR=/absolute/path/to/exports
 YETTEL_HISTORY_DB=/absolute/path/to/yettel-history.sqlite3
 YETTEL_TIMEOUT_SECONDS=30
 YETTEL_RETRIES=1
+YETTEL_DEFAULT_FORMAT=xlsx
+YETTEL_LOW_DATA_GB_THRESHOLD=5
+YETTEL_EXPIRY_WARNING_DAYS=3
+YETTEL_EXPORT_OPEN_AFTER_CREATE=false
 YETTEL_DEBUG_HTML_DIR=/absolute/path/to/debug-html
 ```
+
+If `YETTEL_DEBUG_HTML_DIR` is set and the parser cannot find usage rows, the app writes redacted HTML there and includes the debug file path in the error.
 
 ## Tests
 
@@ -199,6 +226,9 @@ Current coverage includes:
 - mocked usage POST fields
 - CSV rendering
 - SQLite history persistence
+- latest-history snapshot lookup
+- business report warnings and change detection
+- native `.xlsx` package generation
 - menu exit behavior
 
 ## Project Layout
@@ -213,7 +243,9 @@ src/yettel_cli/
   models.py     typed data models
   output.py     text, JSON, CSV, export helpers
   parsing.py    HTML form/table parsers
+  report.py     business summaries, warnings, changes
   storage.py    SQLite history
+  xlsx.py       native Excel workbook writer
 
 tests/
   fixtures/     sanitized portal HTML samples

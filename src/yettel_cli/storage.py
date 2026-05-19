@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-from .models import UsageResult
+from .models import UsageResult, UsageRow
 
 
 class UsageHistoryStore:
@@ -54,3 +54,36 @@ class UsageHistoryStore:
 
     def save_results(self, results: list[UsageResult]) -> int:
         return sum(self.save_result(result) for result in results)
+
+    def latest_result(self, phone: str) -> UsageResult | None:
+        self.initialize()
+        with sqlite3.connect(self.db_path) as connection:
+            fetched_row = connection.execute(
+                "SELECT MAX(fetched_at) FROM usage_history WHERE phone = ?",
+                (phone,),
+            ).fetchone()
+            fetched_at = fetched_row[0] if fetched_row else None
+            if not fetched_at:
+                return None
+
+            rows = connection.execute(
+                """
+                SELECT name, limit_value, available, valid_until
+                FROM usage_history
+                WHERE phone = ? AND fetched_at = ?
+                ORDER BY id
+                """,
+                (phone, fetched_at),
+            ).fetchall()
+
+        return UsageResult(
+            phone=phone,
+            rows=[
+                UsageRow(name=name, limit=limit_value, available=available, valid_until=valid_until)
+                for name, limit_value, available, valid_until in rows
+            ],
+            fetched_at=UsageResult.parse_fetched_at(fetched_at),
+        )
+
+    def latest_results(self, phones: list[str]) -> dict[str, UsageResult]:
+        return {phone: result for phone in phones if (result := self.latest_result(phone)) is not None}

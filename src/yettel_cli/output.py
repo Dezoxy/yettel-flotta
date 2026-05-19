@@ -8,6 +8,8 @@ from io import StringIO
 from pathlib import Path
 
 from .models import UsageResult
+from .report import BusinessReport
+from .xlsx import write_usage_xlsx
 
 
 def usage_result_dicts(result: UsageResult, *, include_phone: bool = False) -> list[dict[str, str]]:
@@ -33,6 +35,10 @@ def print_usage_result(result: UsageResult, output_format: str) -> None:
         sys.stdout.write(render_usage_csv([result]))
         return
 
+    if output_format == "xlsx":
+        print("XLSX is a file format. Use --save or the report command to create a workbook.")
+        return
+
     print(f"Phone: {result.phone}")
     for row in result.rows:
         print(f"{row.name}: {row.available} / {row.limit} (valid until {row.valid_until})")
@@ -47,23 +53,43 @@ def print_usage_results(results: list[UsageResult], output_format: str) -> None:
         sys.stdout.write(render_usage_csv(results))
         return
 
+    if output_format == "xlsx":
+        print("XLSX is a file format. Use --save or the report command to create a workbook.")
+        return
+
     for result in results:
         print_usage_result(result, "text")
         print()
 
 
-def export_usage_result(result: UsageResult, export_dir: Path, output_format: str) -> Path:
+def export_usage_result(
+    result: UsageResult,
+    export_dir: Path,
+    output_format: str,
+    report: BusinessReport | None = None,
+) -> Path:
     path = export_dir / export_name(f"usage_{safe_filename(result.phone)}", result.fetched_at, output_format)
     export_dir.mkdir(parents=True, exist_ok=True)
+    if output_format == "xlsx":
+        write_usage_xlsx(path, [result], report)
+        return path
     write_export(path, render_single_result(result, output_format), output_format)
     return path
 
 
-def export_usage_results(results: list[UsageResult], export_dir: Path, output_format: str) -> Path:
+def export_usage_results(
+    results: list[UsageResult],
+    export_dir: Path,
+    output_format: str,
+    report: BusinessReport | None = None,
+) -> Path:
     fetched_at = results[0].fetched_at if results else None
     timestamp = fetched_at.strftime("%Y%m%d_%H%M%S") if fetched_at else "empty"
     path = export_dir / f"usage_all_{timestamp}.{extension_for(output_format)}"
     export_dir.mkdir(parents=True, exist_ok=True)
+    if output_format == "xlsx":
+        write_usage_xlsx(path, results, report)
+        return path
     write_export(path, render_many_results(results, output_format), output_format)
     return path
 
@@ -73,6 +99,8 @@ def render_single_result(result: UsageResult, output_format: str) -> str:
         return json.dumps(result.to_dict(), ensure_ascii=False, indent=2) + "\n"
     if output_format == "csv":
         return render_usage_csv([result])
+    if output_format == "xlsx":
+        return ""
     return render_usage_text([result])
 
 
@@ -81,6 +109,8 @@ def render_many_results(results: list[UsageResult], output_format: str) -> str:
         return json.dumps([result.to_dict() for result in results], ensure_ascii=False, indent=2) + "\n"
     if output_format == "csv":
         return render_usage_csv(results)
+    if output_format == "xlsx":
+        return ""
     return render_usage_text(results)
 
 

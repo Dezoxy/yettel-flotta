@@ -4,13 +4,17 @@ import argparse
 import getpass
 import json
 import os
+import subprocess
 import sys
 from collections.abc import Iterable
+from pathlib import Path
 
 from .client import YettelClient
 from .config import AppConfig
+from .constants import SUPPORTED_OUTPUT_FORMATS
 from .errors import YettelError
 from .output import export_usage_result, export_usage_results, print_usage_result, print_usage_results
+from .report import BusinessReport, build_business_report
 from .storage import UsageHistoryStore
 
 
@@ -52,21 +56,26 @@ def prompt_menu_choice(client: YettelClient, config: AppConfig) -> str:
     print("3. List phone numbers")
     print("4. Fetch usage by phone number")
     print("5. Fetch usage by selecting a phone number")
-    print("6. Fetch all phone numbers and export")
-    print("7. Exit")
+    print("6. Fetch last selected phone again")
+    print("7. Fetch all phone numbers and export")
+    print("8. Build business report")
+    print("9. Open exports folder")
+    print("10. Exit")
     return prompt_text("Select option: ")
 
 
-def prompt_output_format(default: str = "text") -> str:
-    formats = {"1": "text", "2": "json", "3": "csv", "": default}
-    default_label = {"text": "1", "json": "2", "csv": "3"}[default]
+def prompt_output_format(default: str | None = None) -> str:
+    resolved_default = default or "text"
+    formats = {"1": "text", "2": "json", "3": "csv", "4": "xlsx", "": resolved_default}
+    default_label = {"text": "1", "json": "2", "csv": "3", "xlsx": "4"}[resolved_default]
     print()
     print("Output format")
     print("1. Text")
     print("2. JSON")
     print("3. CSV")
+    print("4. XLSX")
     choice = prompt_text(f"Select format [{default_label}]: ")
-    return formats.get(choice, default)
+    return formats.get(choice, resolved_default)
 
 
 def yes_no(prompt: str, default: bool = False) -> bool:
@@ -85,11 +94,69 @@ def print_phones(numbers: list[str]) -> None:
         print(f"{index}. {phone}")
 
 
+def choose_phone(numbers: list[str]) -> str | None:
+    query = prompt_text("Filter phone numbers [Enter for all]: ")
+    filtered = [phone for phone in numbers if query in phone] if query else numbers
+    print_phones(filtered)
+    if not filtered:
+        return None
+    selected = prompt_text("Select phone number: ")
+    if selected in filtered:
+        return selected
+    if selected.isdigit() and 1 <= int(selected) <= len(filtered):
+        return filtered[int(selected) - 1]
+    print("Invalid phone selection.")
+    return None
+
+
 def save_history_if_requested(config: AppConfig, results, enabled: bool) -> None:
     if not enabled:
         return
     count = UsageHistoryStore(config.db_path).save_results(results if isinstance(results, list) else [results])
     print(f"Saved {count} history rows to {config.db_path}.")
+
+
+def maybe_open_path(path: Path, *, enabled: bool) -> None:
+    if not enabled:
+        return
+    if sys.platform == "darwin":
+        subprocess.run(["open", str(path)], check=False)
+    elif sys.platform.startswith("linux"):
+        subprocess.run(["xdg-open", str(path)], check=False)
+    elif sys.platform.startswith("win"):
+        os.startfile(path)  # type: ignore[attr-defined]
+
+
+def resolve_format(args: argparse.Namespace, config: AppConfig, default: str) -> str:
+    return args.format or config.default_format or default
+
+
+def print_report_summary(report: BusinessReport, export_path: Path | None = None) -> None:
+    print()
+    print("Business report")
+    print(f"Phones: {report.phone_count}")
+    print(f"Usage rows: {report.row_count}")
+    print(f"Warnings: {len(report.warnings)}")
+    print(f"Changes since last snapshot: {len(report.changes)}")
+    if export_path:
+        print(f"Exported: {export_path}")
+
+    if report.warnings:
+        print()
+        print("Warnings")
+        for warning in report.warnings[:10]:
+            print(f"- {warning.severity.upper()} {warning.phone} {warning.item}: {warning.message}")
+        if len(report.warnings) > 10:
+            print(f"- ... {len(report.warnings) - 10} more")
+
+    if report.changes:
+        print()
+        print("Changes")
+        for change in report.changes[:10]:
+            delta = f" ({change.delta})" if change.delta else ""
+            print(f"- {change.phone} {change.item}: {change.previous_available} -> {change.current_available}{delta}")
+        if len(report.changes) > 10:
+            print(f"- ... {len(report.changes) - 10} more")
 
 
 def handle_login(args: argparse.Namespace, client: YettelClient, config: AppConfig) -> int:
@@ -118,26 +185,47 @@ def handle_phones(args: argparse.Namespace, client: YettelClient) -> int:
 
 
 def handle_usage(args: argparse.Namespace, client: YettelClient, config: AppConfig) -> int:
+    output_format = resolve_format(args, config, default="text")
     result = client.usage(args.phone)
-    print_usage_result(result, args.format)
-    if args.save:
-        path = export_usage_result(result, config.export_dir, args.format)
+    if output_format == "xlsx" or args.save:
+        path = export_usage_result(result, config.export_dir, output_format)
         print(f"Exported {path}.")
+        maybe_open_path(path, enabled=args.open or config.export_open_after_create)
+    if output_format != "xlsx":
+        print_usage_result(result, output_format)
     save_history_if_requested(config, result, args.history)
     return 0
 
 
 def handle_all_usage(args: argparse.Namespace, client: YettelClient, config: AppConfig) -> int:
+    output_format = resolve_format(args, config, default="csv")
     results = client.all_usage()
-    print_usage_results(results, args.format)
-    if args.save:
-        path = export_usage_results(results, config.export_dir, args.format)
+    if output_format == "xlsx" or args.save:
+        path = export_usage_results(results, config.export_dir, output_format)
         print(f"Exported {path}.")
+        maybe_open_path(path, enabled=args.open or config.export_open_after_create)
+    if output_format != "xlsx":
+        print_usage_results(results, output_format)
     save_history_if_requested(config, results, args.history)
     return 0
 
 
+def handle_report(args: argparse.Namespace, client: YettelClient, config: AppConfig) -> int:
+    output_format = resolve_format(args, config, default="xlsx")
+    store = UsageHistoryStore(config.db_path)
+    results = client.all_usage()
+    previous_results = store.latest_results([result.phone for result in results])
+    report = build_business_report(results, previous_results, config)
+    path = export_usage_results(results, config.export_dir, output_format, report=report)
+    saved = store.save_results(results)
+    print_report_summary(report, path)
+    print(f"Saved {saved} history rows to {config.db_path}.")
+    maybe_open_path(path, enabled=args.open or config.export_open_after_create)
+    return 0
+
+
 def interactive_menu(args: argparse.Namespace, client: YettelClient, config: AppConfig) -> int:
+    last_phone: str | None = None
     try:
         while True:
             choice = prompt_menu_choice(client, config)
@@ -160,44 +248,76 @@ def interactive_menu(args: argparse.Namespace, client: YettelClient, config: App
                     if not phone:
                         print("Phone number is required.")
                         continue
-                    output_format = prompt_output_format()
+                    last_phone = phone
+                    output_format = prompt_output_format(config.default_format)
                     result = client.usage(phone)
-                    print_usage_result(result, output_format)
-                    if yes_no("Export this result?"):
-                        print(f"Exported {export_usage_result(result, config.export_dir, output_format)}.")
+                    if output_format != "xlsx":
+                        print_usage_result(result, output_format)
+                    if output_format == "xlsx" or yes_no("Export this result?"):
+                        path = export_usage_result(result, config.export_dir, output_format)
+                        print(f"Exported {path}.")
+                        maybe_open_path(path, enabled=config.export_open_after_create)
                     if yes_no("Save to SQLite history?"):
                         save_history_if_requested(config, result, True)
                     continue
 
                 if choice == "5":
                     phones = [phone.number for phone in client.phones()]
-                    print_phones(phones)
-                    if not phones:
+                    selected_phone = choose_phone(phones)
+                    if not selected_phone:
                         continue
-                    selected = prompt_text("Select phone number: ")
-                    if not selected.isdigit() or not 1 <= int(selected) <= len(phones):
-                        print("Invalid phone selection.")
-                        continue
-                    output_format = prompt_output_format()
-                    result = client.usage(phones[int(selected) - 1])
-                    print_usage_result(result, output_format)
-                    if yes_no("Export this result?"):
-                        print(f"Exported {export_usage_result(result, config.export_dir, output_format)}.")
+                    last_phone = selected_phone
+                    print(f"Selected phone: {selected_phone}")
+                    output_format = prompt_output_format(config.default_format)
+                    result = client.usage(selected_phone)
+                    if output_format != "xlsx":
+                        print_usage_result(result, output_format)
+                    if output_format == "xlsx" or yes_no("Export this result?"):
+                        path = export_usage_result(result, config.export_dir, output_format)
+                        print(f"Exported {path}.")
+                        maybe_open_path(path, enabled=config.export_open_after_create)
                     if yes_no("Save to SQLite history?"):
                         save_history_if_requested(config, result, True)
                     continue
 
                 if choice == "6":
-                    output_format = prompt_output_format(default="csv")
+                    if not last_phone:
+                        print("No last selected phone yet.")
+                        continue
+                    print(f"Selected phone: {last_phone}")
+                    output_format = prompt_output_format(config.default_format)
+                    result = client.usage(last_phone)
+                    if output_format != "xlsx":
+                        print_usage_result(result, output_format)
+                    if output_format == "xlsx" or yes_no("Export this result?"):
+                        path = export_usage_result(result, config.export_dir, output_format)
+                        print(f"Exported {path}.")
+                        maybe_open_path(path, enabled=config.export_open_after_create)
+                    if yes_no("Save to SQLite history?"):
+                        save_history_if_requested(config, result, True)
+                    continue
+
+                if choice == "7":
+                    output_format = prompt_output_format(default=config.default_format or "csv")
                     results = client.all_usage()
                     path = export_usage_results(results, config.export_dir, output_format)
                     print(f"Fetched {len(results)} phone numbers.")
                     print(f"Exported {path}.")
+                    maybe_open_path(path, enabled=config.export_open_after_create)
                     if yes_no("Save to SQLite history?"):
                         save_history_if_requested(config, results, True)
                     continue
 
-                if choice in {"7", "q", "quit", "exit"}:
+                if choice == "8":
+                    handle_report(argparse.Namespace(format=None, open=False), client, config)
+                    continue
+
+                if choice == "9":
+                    config.export_dir.mkdir(parents=True, exist_ok=True)
+                    maybe_open_path(config.export_dir, enabled=True)
+                    continue
+
+                if choice in {"10", "q", "quit", "exit"}:
                     return 0
 
                 print("Unknown option.")
@@ -230,14 +350,20 @@ def build_parser() -> argparse.ArgumentParser:
 
     usage = subparsers.add_parser("usage", help="Fetch usage rows for one phone number.")
     usage.add_argument("phone", help="Phone number as shown in Yettel, e.g. 201234567.")
-    usage.add_argument("--format", choices=["text", "json", "csv"], default="text")
+    usage.add_argument("--format", choices=SUPPORTED_OUTPUT_FORMATS, default=None)
     usage.add_argument("--save", action="store_true", help="Write the result to the export folder.")
     usage.add_argument("--history", action="store_true", help="Save fetched rows to SQLite history.")
+    usage.add_argument("--open", action="store_true", help="Open the exported file after creation.")
 
     all_usage = subparsers.add_parser("all-usage", help="Fetch usage rows for every phone number.")
-    all_usage.add_argument("--format", choices=["text", "json", "csv"], default="csv")
+    all_usage.add_argument("--format", choices=SUPPORTED_OUTPUT_FORMATS, default=None)
     all_usage.add_argument("--save", action="store_true", help="Write the result to the export folder.")
     all_usage.add_argument("--history", action="store_true", help="Save fetched rows to SQLite history.")
+    all_usage.add_argument("--open", action="store_true", help="Open the exported file after creation.")
+
+    report = subparsers.add_parser("report", help="Fetch all numbers, save history, export a business report.")
+    report.add_argument("--format", choices=SUPPORTED_OUTPUT_FORMATS, default=None)
+    report.add_argument("--open", action="store_true", help="Open the exported report after creation.")
 
     return parser
 
@@ -267,6 +393,8 @@ def main(argv: Iterable[str] | None = None) -> int:
             return handle_usage(args, client, config)
         if args.command == "all-usage":
             return handle_all_usage(args, client, config)
+        if args.command == "report":
+            return handle_report(args, client, config)
     except YettelError as error:
         print(f"error: {error}", file=sys.stderr)
         return 1

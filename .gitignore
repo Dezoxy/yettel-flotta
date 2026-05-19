@@ -3,6 +3,7 @@
 .DS_Store
 yettel-history.sqlite3
 exports/
+debug-html/
 __pycache__/
 *.py[cod]
 .pytest_cache/
