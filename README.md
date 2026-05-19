@@ -119,6 +119,12 @@ Single-number usage returns rows with:
 - `available`
 - `valid_until`
 
+CSV output is Excel-friendly by default:
+
+- UTF-8 with BOM
+- semicolon-separated (`;`)
+- safe CSV quoting
+
 CSV exports include business context columns:
 
 - `phone`

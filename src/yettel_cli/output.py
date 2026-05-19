@@ -55,7 +55,7 @@ def print_usage_results(results: list[UsageResult], output_format: str) -> None:
 def export_usage_result(result: UsageResult, export_dir: Path, output_format: str) -> Path:
     path = export_dir / export_name(f"usage_{safe_filename(result.phone)}", result.fetched_at, output_format)
     export_dir.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_single_result(result, output_format), encoding="utf-8")
+    write_export(path, render_single_result(result, output_format), output_format)
     return path
 
 
@@ -64,7 +64,7 @@ def export_usage_results(results: list[UsageResult], export_dir: Path, output_fo
     timestamp = fetched_at.strftime("%Y%m%d_%H%M%S") if fetched_at else "empty"
     path = export_dir / f"usage_all_{timestamp}.{extension_for(output_format)}"
     export_dir.mkdir(parents=True, exist_ok=True)
-    path.write_text(render_many_results(results, output_format), encoding="utf-8")
+    write_export(path, render_many_results(results, output_format), output_format)
     return path
 
 
@@ -96,14 +96,23 @@ def render_usage_text(results: list[UsageResult]) -> str:
 
 def render_usage_csv(results: list[UsageResult]) -> str:
     output = StringIO()
+    output.write("\ufeff")
     writer = csv.DictWriter(
         output,
         fieldnames=["phone", "fetched_at", "name", "limit", "available", "valid_until"],
+        delimiter=";",
+        quoting=csv.QUOTE_MINIMAL,
+        lineterminator="\n",
     )
     writer.writeheader()
     for result in results:
         writer.writerows(usage_result_dicts(result, include_phone=True))
     return output.getvalue()
+
+
+def write_export(path: Path, content: str, output_format: str) -> None:
+    encoding = "utf-8-sig" if output_format == "csv" and not content.startswith("\ufeff") else "utf-8"
+    path.write_text(content, encoding=encoding)
 
 
 def export_name(prefix: str, fetched_at, output_format: str) -> str:
