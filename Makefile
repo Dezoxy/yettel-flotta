@@ -4,7 +4,7 @@ BOOTSTRAP_PYTHON ?= python3
 FORMAT ?= text
 VENV_STAMP := $(VENV)/.yettel-dev-installed
 
-.PHONY: help install install-dev refresh-venv yettel run status login phones usage all-usage test lint format check clean
+.PHONY: help install install-dev refresh-venv yettel run status login phones usage all-usage test lint format check precommit-install precommit-run precommit-uninstall clean
 
 help:
 	@echo "Yettel flotta CLI"
@@ -24,6 +24,9 @@ help:
 	@echo "  make lint                       Run ruff lint"
 	@echo "  make format                     Run ruff format"
 	@echo "  make check                      Run lint and tests"
+	@echo "  make precommit-install          Install git pre-commit hook"
+	@echo "  make precommit-run              Run pre-commit hooks on all files"
+	@echo "  make precommit-uninstall        Remove git pre-commit hook"
 	@echo "  make clean                      Remove local Python caches"
 	@echo ""
 	@echo "Options:"
@@ -83,6 +86,15 @@ format: install-dev
 	PYTHONPATH=src $(PYTHON) -m ruff format .
 
 check: lint test
+
+precommit-install: install-dev
+	PYTHONPATH=src $(PYTHON) -m pre_commit install
+
+precommit-run: install-dev
+	PYTHONPATH=src $(PYTHON) -m pre_commit run --all-files
+
+precommit-uninstall: install-dev
+	PYTHONPATH=src $(PYTHON) -m pre_commit uninstall
 
 clean:
 	find . -type d -name __pycache__ -prune -exec rm -rf {} +

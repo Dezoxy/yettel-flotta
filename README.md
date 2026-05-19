@@ -24,9 +24,11 @@ Cookie files are written with user-only permissions (`0600`). The app never prin
 cp .env.example .env
 # edit .env and set YETTEL_USERNAME and YETTEL_PASSWORD
 make refresh-venv
+make precommit-install
 ```
 
 `make refresh-venv` deletes and rebuilds `.venv`, then installs the project with local dev tools.
+`make precommit-install` installs the git hook that runs format checks, lint, and tests before every commit.
 
 ## Recommended Start
 
@@ -78,6 +80,9 @@ make test
 make lint
 make format
 make check
+make precommit-install
+make precommit-run
+make precommit-uninstall
 make clean
 ```
 
@@ -154,6 +159,28 @@ make check
 - pytest
 
 Tests use sanitized HTML fixtures only. They do not call the live Yettel portal and do not need credentials.
+
+## Pre-commit
+
+Install the hook once:
+
+```bash
+make precommit-install
+```
+
+Run the same hooks manually:
+
+```bash
+make precommit-run
+```
+
+The hook runs:
+
+- `ruff format --check .`
+- `ruff check .`
+- `pytest`
+
+This means commits are blocked when formatting, lint, or tests fail. The hook uses `.venv/bin/python`, so run `make refresh-venv` first if the virtualenv is missing or stale.
 
 Current coverage includes:
 

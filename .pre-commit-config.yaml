@@ -1,0 +1,23 @@
+repos:
+  - repo: local
+    hooks:
+      - id: ruff-format-check
+        name: Ruff format check
+        entry: .venv/bin/python -m ruff format --check .
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: ruff-lint
+        name: Ruff lint
+        entry: .venv/bin/python -m ruff check .
+        language: system
+        pass_filenames: false
+        always_run: true
+
+      - id: pytest
+        name: Pytest
+        entry: .venv/bin/python -m pytest
+        language: system
+        pass_filenames: false
+        always_run: true
