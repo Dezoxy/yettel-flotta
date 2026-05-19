@@ -1,0 +1,13 @@
+.env
+.yettel-cookies.txt
+.DS_Store
+yettel-history.sqlite3
+exports/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.venv/
+dist/
+build/
+*.egg-info/
