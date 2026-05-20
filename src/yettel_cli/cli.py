@@ -327,7 +327,7 @@ def interactive_menu(args: argparse.Namespace, client: YettelClient, config: App
     except UserExit:
         print()
         print("Exiting.")
-        return 130
+        return 0
 
 
 def build_parser() -> argparse.ArgumentParser:

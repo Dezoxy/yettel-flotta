@@ -133,5 +133,5 @@ def test_menu_ctrl_c_exits_cleanly(monkeypatch, tmp_path: Path, capsys) -> None:
 
     monkeypatch.setattr("builtins.input", interrupt)
 
-    assert main(["--env-file", str(tmp_path / ".env"), "--cookie-file", str(tmp_path / "cookies.txt")]) == 130
+    assert main(["--env-file", str(tmp_path / ".env"), "--cookie-file", str(tmp_path / "cookies.txt")]) == 0
     assert "Exiting." in capsys.readouterr().out
