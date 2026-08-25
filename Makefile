@@ -20,7 +20,7 @@ help:
 	@echo "  make login                      Log in using .env credentials"
 	@echo "  make phones                     List phone numbers from the portal"
 	@echo "  make usage PHONE=205...         Fetch usage for a phone number"
-	@echo "  make all-usage                  Fetch all phone numbers"
+	@echo "  make all-usage                  Fetch all phone numbers and save an export"
 	@echo "  make report                     Build full business report"
 	@echo "  make test                       Run unit tests"
 	@echo "  make lint                       Run ruff lint"
